@@ -1,0 +1,246 @@
+<!doctype html><html lang=en-US><head><meta http-equiv=x-clacks-overhead content="GNU Terry Pratchett"><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><link rel="shortcut icon" href=https://zorowk.github.io/images/favicon.png><title>KDE下关于X的窗口合成 | Why</title><meta name=title content="KDE下关于X的窗口合成"><meta name=description content="介绍 这篇文章不是我写的，但最初发布在 http://ktown.kde.org/~fredrik/composite_howto.html 上，现在无法使用。如果有 人知道它是谁写的，我很乐意为它提供正确的归属。本文针对 Qt Widget 工具包，但对于每个公开一些基本 X11 协议的 Widget 工具包都应该有意义。它已从 http://trinity.netcat.be/blog/composite-tutorial (该网络服务器也已消失)复制到此处 以防止其丢失。
+备份文档地址：https://www.talisman.org/~erlkonig/misc/x11-composite-tutorial/
+现在窗口合成已经出现在 X.Org 版本中，很多人会对使用它感兴趣，不仅仅是从用户的角度来看透明和更多的特效，而且从开发人员的角 度来看，能够访问被覆盖的窗口内容。
+本教程是关于使用 Composite 和 Xrender 扩展来完成后者的。使用 Xdamage 跟踪对窗口内容的更改与访问窗口内容紧密相关，因此 本教程也涵盖了这一点。
+本教程主要针对那些对使用 Composite 在桌面视图中提供缩略图感兴趣的人，或者那些从事类似预览功能的人。但是这里介绍的 概念也适用于合成管理器。
+合成器窗口内容可用时 在我们开始之前，我觉得我需要澄清一个关于合成可用窗口的误解。显示窗口时分配 backing pixmap，隐藏时释放分配。换句话说， 这意味着当窗口最小化或不在当前桌面上时，窗口内容不可用，窗口内容对应一块内存。
+窗口合成如此工作有两个基本原因： 第一个是最小化后backing stroe在给定时间所需的video ram. 第二个是在传统的 X 设计中， 在隐藏窗口上绘图实际上是一个 NOOP。聪明的应用程序和工具包知道这一点，所以无论如何他们都不会尝试在最小化的窗口上绘图。
+尽管如此，对于那些希望合成器内存使他们能够例如将鼠标悬停在任务栏按钮上，并获得带有最小化窗口或另一个桌面上的窗口缩略图的工具 提示（以查看窗口是否已更新）。
+想要执行此操作的任务栏/显示视图可以做的最好的事情是在取消映射之前保留窗口内容的缓存缩略图。 Composite 实际上提供了一种简单的 方法来做到这一点，如本教程中所述。
+请注意，虽然最小化窗口的内容永远不可用，但非活动桌面上的窗口内容可能可用，具体取决于 WM 设计。如果 WM 为每个桌面使用一个虚拟 根窗口，并且不取消不活动的那些窗口的映射，那么这些桌面上的那些窗口的内容仍然可用。然而，KWin 和 Metacity 并不是这样设计的。
+使用 Xrender 访问窗口内容的原因 我还将简要解释使用 Xrender 访问窗口内容的动机。如果您想使用核心协议，完全可以为窗口创建 GC 并使用 XCopyArea() 复制窗口的内容，但 是由于 Composite 扩展公开了新的视觉效果（例如带有 alpha 通道的视觉效果），因此没有保证源 drawable 的格式将匹配目标的格式。对于核 心协议，这种情况将导致匹配错误，而 Xrender 扩展不会发生这种情况"><meta name=keywords content="compositor,"><meta property="og:title" content="KDE下关于X的窗口合成"><meta property="og:description" content="介绍 这篇文章不是我写的，但最初发布在 http://ktown.kde.org/~fredrik/composite_howto.html 上，现在无法使用。如果有 人知道它是谁写的，我很乐意为它提供正确的归属。本文针对 Qt Widget 工具包，但对于每个公开一些基本 X11 协议的 Widget 工具包都应该有意义。它已从 http://trinity.netcat.be/blog/composite-tutorial (该网络服务器也已消失)复制到此处 以防止其丢失。
+备份文档地址：https://www.talisman.org/~erlkonig/misc/x11-composite-tutorial/
+现在窗口合成已经出现在 X.Org 版本中，很多人会对使用它感兴趣，不仅仅是从用户的角度来看透明和更多的特效，而且从开发人员的角 度来看，能够访问被覆盖的窗口内容。
+本教程是关于使用 Composite 和 Xrender 扩展来完成后者的。使用 Xdamage 跟踪对窗口内容的更改与访问窗口内容紧密相关，因此 本教程也涵盖了这一点。
+本教程主要针对那些对使用 Composite 在桌面视图中提供缩略图感兴趣的人，或者那些从事类似预览功能的人。但是这里介绍的 概念也适用于合成管理器。
+合成器窗口内容可用时 在我们开始之前，我觉得我需要澄清一个关于合成可用窗口的误解。显示窗口时分配 backing pixmap，隐藏时释放分配。换句话说， 这意味着当窗口最小化或不在当前桌面上时，窗口内容不可用，窗口内容对应一块内存。
+窗口合成如此工作有两个基本原因： 第一个是最小化后backing stroe在给定时间所需的video ram. 第二个是在传统的 X 设计中， 在隐藏窗口上绘图实际上是一个 NOOP。聪明的应用程序和工具包知道这一点，所以无论如何他们都不会尝试在最小化的窗口上绘图。
+尽管如此，对于那些希望合成器内存使他们能够例如将鼠标悬停在任务栏按钮上，并获得带有最小化窗口或另一个桌面上的窗口缩略图的工具 提示（以查看窗口是否已更新）。
+想要执行此操作的任务栏/显示视图可以做的最好的事情是在取消映射之前保留窗口内容的缓存缩略图。 Composite 实际上提供了一种简单的 方法来做到这一点，如本教程中所述。
+请注意，虽然最小化窗口的内容永远不可用，但非活动桌面上的窗口内容可能可用，具体取决于 WM 设计。如果 WM 为每个桌面使用一个虚拟 根窗口，并且不取消不活动的那些窗口的映射，那么这些桌面上的那些窗口的内容仍然可用。然而，KWin 和 Metacity 并不是这样设计的。
+使用 Xrender 访问窗口内容的原因 我还将简要解释使用 Xrender 访问窗口内容的动机。如果您想使用核心协议，完全可以为窗口创建 GC 并使用 XCopyArea() 复制窗口的内容，但 是由于 Composite 扩展公开了新的视觉效果（例如带有 alpha 通道的视觉效果），因此没有保证源 drawable 的格式将匹配目标的格式。对于核 心协议，这种情况将导致匹配错误，而 Xrender 扩展不会发生这种情况"><meta property="og:type" content="article"><meta property="og:url" content="https://zorowk.github.io/kde%E4%B8%8B%E5%85%B3%E4%BA%8Ex%E7%9A%84%E7%AA%97%E5%8F%A3%E5%90%88%E6%88%90/"><meta property="og:image" content="https://zorowk.github.io/images/share.png"><meta property="article:section" content="blog"><meta property="article:published_time" content="2021-11-27T00:00:00+08:00"><meta property="article:modified_time" content="2021-11-27T00:00:00+08:00"><meta property="og:site_name" content=":-)"><meta name=twitter:card content="summary_large_image"><meta name=twitter:image content="https://zorowk.github.io/images/share.png"><meta name=twitter:title content="KDE下关于X的窗口合成"><meta name=twitter:description content="介绍 这篇文章不是我写的，但最初发布在 http://ktown.kde.org/~fredrik/composite_howto.html 上，现在无法使用。如果有 人知道它是谁写的，我很乐意为它提供正确的归属。本文针对 Qt Widget 工具包，但对于每个公开一些基本 X11 协议的 Widget 工具包都应该有意义。它已从 http://trinity.netcat.be/blog/composite-tutorial (该网络服务器也已消失)复制到此处 以防止其丢失。
+备份文档地址：https://www.talisman.org/~erlkonig/misc/x11-composite-tutorial/
+现在窗口合成已经出现在 X.Org 版本中，很多人会对使用它感兴趣，不仅仅是从用户的角度来看透明和更多的特效，而且从开发人员的角 度来看，能够访问被覆盖的窗口内容。
+本教程是关于使用 Composite 和 Xrender 扩展来完成后者的。使用 Xdamage 跟踪对窗口内容的更改与访问窗口内容紧密相关，因此 本教程也涵盖了这一点。
+本教程主要针对那些对使用 Composite 在桌面视图中提供缩略图感兴趣的人，或者那些从事类似预览功能的人。但是这里介绍的 概念也适用于合成管理器。
+合成器窗口内容可用时 在我们开始之前，我觉得我需要澄清一个关于合成可用窗口的误解。显示窗口时分配 backing pixmap，隐藏时释放分配。换句话说， 这意味着当窗口最小化或不在当前桌面上时，窗口内容不可用，窗口内容对应一块内存。
+窗口合成如此工作有两个基本原因： 第一个是最小化后backing stroe在给定时间所需的video ram. 第二个是在传统的 X 设计中， 在隐藏窗口上绘图实际上是一个 NOOP。聪明的应用程序和工具包知道这一点，所以无论如何他们都不会尝试在最小化的窗口上绘图。
+尽管如此，对于那些希望合成器内存使他们能够例如将鼠标悬停在任务栏按钮上，并获得带有最小化窗口或另一个桌面上的窗口缩略图的工具 提示（以查看窗口是否已更新）。
+想要执行此操作的任务栏/显示视图可以做的最好的事情是在取消映射之前保留窗口内容的缓存缩略图。 Composite 实际上提供了一种简单的 方法来做到这一点，如本教程中所述。
+请注意，虽然最小化窗口的内容永远不可用，但非活动桌面上的窗口内容可能可用，具体取决于 WM 设计。如果 WM 为每个桌面使用一个虚拟 根窗口，并且不取消不活动的那些窗口的映射，那么这些桌面上的那些窗口的内容仍然可用。然而，KWin 和 Metacity 并不是这样设计的。
+使用 Xrender 访问窗口内容的原因 我还将简要解释使用 Xrender 访问窗口内容的动机。如果您想使用核心协议，完全可以为窗口创建 GC 并使用 XCopyArea() 复制窗口的内容，但 是由于 Composite 扩展公开了新的视觉效果（例如带有 alpha 通道的视觉效果），因此没有保证源 drawable 的格式将匹配目标的格式。对于核 心协议，这种情况将导致匹配错误，而 Xrender 扩展不会发生这种情况"><meta itemprop=name content="KDE下关于X的窗口合成"><meta itemprop=description content="介绍 这篇文章不是我写的，但最初发布在 http://ktown.kde.org/~fredrik/composite_howto.html 上，现在无法使用。如果有 人知道它是谁写的，我很乐意为它提供正确的归属。本文针对 Qt Widget 工具包，但对于每个公开一些基本 X11 协议的 Widget 工具包都应该有意义。它已从 http://trinity.netcat.be/blog/composite-tutorial (该网络服务器也已消失)复制到此处 以防止其丢失。
+备份文档地址：https://www.talisman.org/~erlkonig/misc/x11-composite-tutorial/
+现在窗口合成已经出现在 X.Org 版本中，很多人会对使用它感兴趣，不仅仅是从用户的角度来看透明和更多的特效，而且从开发人员的角 度来看，能够访问被覆盖的窗口内容。
+本教程是关于使用 Composite 和 Xrender 扩展来完成后者的。使用 Xdamage 跟踪对窗口内容的更改与访问窗口内容紧密相关，因此 本教程也涵盖了这一点。
+本教程主要针对那些对使用 Composite 在桌面视图中提供缩略图感兴趣的人，或者那些从事类似预览功能的人。但是这里介绍的 概念也适用于合成管理器。
+合成器窗口内容可用时 在我们开始之前，我觉得我需要澄清一个关于合成可用窗口的误解。显示窗口时分配 backing pixmap，隐藏时释放分配。换句话说， 这意味着当窗口最小化或不在当前桌面上时，窗口内容不可用，窗口内容对应一块内存。
+窗口合成如此工作有两个基本原因： 第一个是最小化后backing stroe在给定时间所需的video ram. 第二个是在传统的 X 设计中， 在隐藏窗口上绘图实际上是一个 NOOP。聪明的应用程序和工具包知道这一点，所以无论如何他们都不会尝试在最小化的窗口上绘图。
+尽管如此，对于那些希望合成器内存使他们能够例如将鼠标悬停在任务栏按钮上，并获得带有最小化窗口或另一个桌面上的窗口缩略图的工具 提示（以查看窗口是否已更新）。
+想要执行此操作的任务栏/显示视图可以做的最好的事情是在取消映射之前保留窗口内容的缓存缩略图。 Composite 实际上提供了一种简单的 方法来做到这一点，如本教程中所述。
+请注意，虽然最小化窗口的内容永远不可用，但非活动桌面上的窗口内容可能可用，具体取决于 WM 设计。如果 WM 为每个桌面使用一个虚拟 根窗口，并且不取消不活动的那些窗口的映射，那么这些桌面上的那些窗口的内容仍然可用。然而，KWin 和 Metacity 并不是这样设计的。
+使用 Xrender 访问窗口内容的原因 我还将简要解释使用 Xrender 访问窗口内容的动机。如果您想使用核心协议，完全可以为窗口创建 GC 并使用 XCopyArea() 复制窗口的内容，但 是由于 Composite 扩展公开了新的视觉效果（例如带有 alpha 通道的视觉效果），因此没有保证源 drawable 的格式将匹配目标的格式。对于核 心协议，这种情况将导致匹配错误，而 Xrender 扩展不会发生这种情况"><meta itemprop=datePublished content="2021-11-27T00:00:00+08:00"><meta itemprop=dateModified content="2021-11-27T00:00:00+08:00"><meta itemprop=wordCount content="1373"><meta itemprop=image content="https://zorowk.github.io/images/share.png"><meta itemprop=keywords content="compositor,"><meta name=referrer content="no-referrer-when-downgrade"><style>body{font-family:Verdana,sans-serif;margin:auto;padding:20px;max-width:720px;text-align:left;background-color:#fff;word-wrap:break-word;overflow-wrap:break-word;line-height:1.5;color:#444}h1,h2,h3,h4,h5,h6,strong,b{color:#222}a{color:#3273dc}.title{text-decoration:none;border:0}.title span{font-weight:400}nav a{margin-right:10px}textarea{width:100%;font-size:16px}input{font-size:16px}content{line-height:1.6}table{width:100%}img{max-width:100%}code{padding:2px 5px;background-color:#f2f2f2}pre code{color:#222;display:block;padding:20px;white-space:pre-wrap;font-size:14px;overflow-x:auto}div.highlight pre{background-color:initial;color:initial}div.highlight code{background-color:unset;color:unset}blockquote{border-left:1px solid #999;color:#222;padding-left:20px;font-style:italic}footer{padding:25px;text-align:center}.helptext{color:#777;font-size:small}.errorlist{color:#eba613;font-size:small}ul.blog-posts{list-style-type:none;padding:unset}ul.blog-posts li{display:flex}ul.blog-posts li span{flex:0 0 130px}ul.blog-posts li a:visited{color:#8b6fcb}@media(prefers-color-scheme:dark){body{background-color:#333;color:#ddd}h1,h2,h3,h4,h5,h6,strong,b{color:#eee}a{color:#8cc2dd}code{background-color:#777}pre code{color:#ddd}blockquote{color:#ccc}textarea,input{background-color:#252525;color:#ddd}.helptext{color:#aaa}}</style></head><body><header><a href=/ class=title><h2>Why</h2></a><nav><a href=/>Home</a>
+<a href=/blog>Blog</a></nav></header><main><h1>KDE下关于X的窗口合成</h1><p><i><time datetime=2021-11-27 pubdate>27 Nov, 2021</time></i></p><content><h2 id=介绍>介绍</h2><p>这篇文章不是我写的，但最初发布在 <a href=http://ktown.kde.org/~fredrik/composite_howto.html>http://ktown.kde.org/~fredrik/composite_howto.html</a> 上，现在无法使用。如果有
+人知道它是谁写的，我很乐意为它提供正确的归属。本文针对 Qt Widget 工具包，但对于每个公开一些基本 X11 协议的 Widget
+工具包都应该有意义。它已从 <a href=http://trinity.netcat.be/blog/composite-tutorial>http://trinity.netcat.be/blog/composite-tutorial</a> (该网络服务器也已消失)复制到此处
+以防止其丢失。</p><p>备份文档地址：<a href=https://www.talisman.org/~erlkonig/misc/x11-composite-tutorial/>https://www.talisman.org/~erlkonig/misc/x11-composite-tutorial/</a></p><p>现在窗口合成已经出现在 X.Org 版本中，很多人会对使用它感兴趣，不仅仅是从用户的角度来看透明和更多的特效，而且从开发人员的角
+度来看，能够访问被覆盖的窗口内容。</p><p>本教程是关于使用 Composite 和 Xrender 扩展来完成后者的。使用 Xdamage 跟踪对窗口内容的更改与访问窗口内容紧密相关，因此
+本教程也涵盖了这一点。</p><p>本教程主要针对那些对使用 Composite 在桌面视图中提供缩略图感兴趣的人，或者那些从事类似预览功能的人。但是这里介绍的
+概念也适用于合成管理器。</p><h3 id=合成器窗口内容可用时>合成器窗口内容可用时</h3><p>在我们开始之前，我觉得我需要澄清一个关于合成可用窗口的误解。显示窗口时分配 backing pixmap，隐藏时释放分配。换句话说，
+这意味着当窗口最小化或不在当前桌面上时，窗口内容不可用，窗口内容对应一块内存。</p><p>窗口合成如此工作有两个基本原因： 第一个是最小化后backing stroe在给定时间所需的video ram. 第二个是在传统的 X 设计中，
+在隐藏窗口上绘图实际上是一个 NOOP。聪明的应用程序和工具包知道这一点，所以无论如何他们都不会尝试在最小化的窗口上绘图。</p><p>尽管如此，对于那些希望合成器内存使他们能够例如将鼠标悬停在任务栏按钮上，并获得带有最小化窗口或另一个桌面上的窗口缩略图的工具
+提示（以查看窗口是否已更新）。</p><p>想要执行此操作的任务栏/显示视图可以做的最好的事情是在取消映射之前保留窗口内容的缓存缩略图。 Composite 实际上提供了一种简单的
+方法来做到这一点，如本教程中所述。</p><p>请注意，虽然最小化窗口的内容永远不可用，但非活动桌面上的窗口内容可能可用，具体取决于 WM 设计。如果 WM 为每个桌面使用一个虚拟
+根窗口，并且不取消不活动的那些窗口的映射，那么这些桌面上的那些窗口的内容仍然可用。然而，KWin 和 Metacity 并不是这样设计的。</p><h3 id=使用-xrender-访问窗口内容的原因>使用 Xrender 访问窗口内容的原因</h3><p>我还将简要解释使用 Xrender 访问窗口内容的动机。如果您想使用核心协议，完全可以为窗口创建 GC 并使用 XCopyArea() 复制窗口的内容，但
+是由于 Composite 扩展公开了新的视觉效果（例如带有 alpha 通道的视觉效果），因此没有保证源 drawable 的格式将匹配目标的格式。对于核
+心协议，这种情况将导致匹配错误，而 Xrender 扩展不会发生这种情况</p><p>此外，核心协议不了解 alpha 通道，这意味着它无法合成使用新 ARGB 视觉效果的窗口。当源和目标具有相同的格式时，使用 X11R6.8 的核心协议
+也没有性能优势。该版本也是第一个支持新合成扩展的版本。因此，总而言之，在这些操作的核心协议上选择 Xrender 没有任何缺点，只有优点。</p><h2 id=检查x服务器是否支持composite扩展>检查X服务器是否支持composite扩展</h2><p>您需要做的第一件事是进行运行时检查以确保您连接的 X 服务器实际上支持composite扩展。当然，您也需要进行编译时检查，但这只会告诉您composite库
+可用，而不是应用程序将使用的 X 服务器具有此服务</p><p>在调用 Xlib 函数之前，您需要从 Qt 获得一个指向 Display 结构的指针，它是每个 Xlib 函数的第一个参数。 Display 结构包含有关与 X 服务器的连接
+的信息，例如套接字号。该指针是通过调用静态函数 QPaintDevice::x11AppDisplay() 获得的，如果您需要从继承 QPaintDevice 的类内部指向 Display
+结构的指针，则可以调用 x11Display() 代替。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span>Display <span style=color:#f92672>*</span>dpy <span style=color:#f92672>=</span> QPaintDevice<span style=color:#f92672>::</span>x11AppDisplay();
+</span></span></code></pre></div><p>请注意，必须在向 Qt 请求 Display 指针之前创建 KApplication 对象，因为在 QApplication 建立到 X 服务器的连接之前它不会被初始化。一旦有了指向
+Display 结构的指针，我们就可以继续对扩展进行运行时检查：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>bool</span> hasNamePixmap <span style=color:#f92672>=</span> false;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> event_base, error_base;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>if</span> ( XCompositeQueryExtension( dpy, <span style=color:#f92672>&amp;</span>event_base, <span style=color:#f92672>&amp;</span>error_base ) )
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// If we get here the server supports the extension
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>int</span> major <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>, minor <span style=color:#f92672>=</span> <span style=color:#ae81ff>2</span>; <span style=color:#75715e>// The highest version we support
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    XCompositeQueryVersion( dpy, <span style=color:#f92672>&amp;</span>major, <span style=color:#f92672>&amp;</span>minor );
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#75715e>// major and minor will now contain the highest version the server supports.
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#75715e>// The protocol specifies that the returned version will never be higher
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#75715e>// then the one requested. Version 0.2 is the first version to have the
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#75715e>// XCompositeNameWindowPixmap() request.
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    <span style=color:#66d9ef>if</span> ( major <span style=color:#f92672>&gt;</span> <span style=color:#ae81ff>0</span> <span style=color:#f92672>||</span> minor <span style=color:#f92672>&gt;=</span> <span style=color:#ae81ff>2</span> )
+</span></span><span style=display:flex><span>        hasNamePixmap <span style=color:#f92672>=</span> true;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><h2 id=将所有顶级窗口重定向到离屏pixmaps>将所有顶级窗口重定向到离屏pixmaps</h2><p>一旦确定 X 服务器支持 Composite 扩展，就需要确保要抓取的窗口内容在backing pixmap中可用，主要是要保证正确的可用格式。
+这是通过为每个根窗口调用一次 XCompositeRedirectSubwindows() 来完成的，指定您想要自动重定向</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>for</span> ( <span style=color:#66d9ef>int</span> i <span style=color:#f92672>=</span> <span style=color:#ae81ff>0</span>; i <span style=color:#f92672>&lt;</span> ScreenCount( dpy ); i<span style=color:#f92672>++</span> )
+</span></span><span style=display:flex><span>    XCompositeRedirectSubwindows( dpy, RootWindow( dpy, i ),
+</span></span><span style=display:flex><span>CompositeRedirectAutomatic );
+</span></span></code></pre></div><p>这会将每个屏幕上所有当前和未来的顶级窗口重定向到屏幕外存储。</p><p>您无需担心取消重定向窗口，因为这将在您的应用程序关闭时自动完成。此外，如果合成管理器已经重定向了窗口，则此调用将是 NOOP，因此
+您无需担心这种中断，例如xcompmgr。</p><p>窗口本身没有注意到它们已被重定向到屏幕外存储的事实，并且无需对现有应用程序进行修改即可使其正常工作。无论是从用户的角度还是从应用程序
+的角度来看，一切都将像重定向窗口之前一样继续工作。</p><p>请注意，如果您知道您不会处理多个窗口，那么最好使用 XCompositeRedirectWindow() 重定向您感兴趣的窗口。然后，您可以在完成后取消重定
+向（使用 XCompositeUnredirectWindow()）。</p><h2 id=引用窗口内容>引用窗口内容</h2><p>如果你想访问一个窗口的内容，你必须首先知道它的 ID。创建 QPixmap 并简单地将窗口内容复制到其中可能很诱人，但请记住，该窗口已经是一个
+像素图，如果您想存储多个窗口的内容，为每个窗口创建一个 QPixmap 意味着每个窗口最终在video RAM 中存储两次。所以换句话说，这不是一个好
+主意。如果您只想存储每个窗口的缩略图，那么将它们缓存在 QPixmaps 中可能是个好主意。</p><h3 id=获取有关窗口的信息>获取有关窗口的信息</h3><p>当我们知道窗口ID，我们需要找出有关窗口的其他一些信息，例如它的大小、支持backing pixmap的像素格式以及窗口是否具有 alpha 通道。事实证
+明，我们可以通过调用 XGetWindowAttributes() 找出其中的大部分内容：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#75715e>// We need to find out some things about the window, such as its size, its position
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// on the screen, and the format of the pixel data
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>XWindowAttributes attr;
+</span></span><span style=display:flex><span>XGetWindowAttributes( dpy, wId, <span style=color:#f92672>&amp;</span>attr );
+</span></span></code></pre></div><p>XGetWindowAttributes 是一个同步调用（它会阻塞），因此您不想过于频繁地调用此函数。在现实世界的应用程序中，您还需要检查返回值，因为由于
+X 的异步特性，在进行调用时窗口可能已被销毁。</p><p>一旦 XGetWindowAttributes() 填充了 XWindowAttributes 结构的成员，我们将提取我们需要的数据：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span>XRenderPictFormat <span style=color:#f92672>*</span>format <span style=color:#f92672>=</span> XRenderFindVisualFormat( dpy, attr.visual );
+</span></span><span style=display:flex><span><span style=color:#66d9ef>bool</span> hasAlpha             <span style=color:#f92672>=</span> ( format<span style=color:#f92672>-&gt;</span>type <span style=color:#f92672>==</span> PictTypeDirect <span style=color:#f92672>&amp;&amp;</span> format<span style=color:#f92672>-&gt;</span>direct.alphaMask );
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> x                     <span style=color:#f92672>=</span> attr.x;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> y                     <span style=color:#f92672>=</span> attr.y;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> width                 <span style=color:#f92672>=</span> attr.width;
+</span></span><span style=display:flex><span><span style=color:#66d9ef>int</span> height                <span style=color:#f92672>=</span> attr.height;
+</span></span></code></pre></div><h3 id=创建渲染图片以便我们可以访问窗口内容>创建渲染图片以便我们可以访问窗口内容</h3><p>现在我们知道窗口的大小、像素格式以及窗口是否有 alpha 通道。我们现在需要做的是为窗口创建一个 XRender 图片，我们需要使用 Render 扩展来绘
+制它。图片基本上是服务器端结构的句柄，其中包含有关可绘制对象（在本例中为窗口）的一些附加信息，例如其格式、绘制时应使用的剪辑区域（如果有）、
+是否应该使用贴图等。</p><p>为可绘制对象创建图片是通过调用 XRenderCreatePicture() 完成的。与 XGetWindowAttributes() 不同，此函数不是同步的，因此如果窗口不存在，它
+不会返回错误代码。相反，当 X 服务器处理请求时，将向应用程序发送 X 错误，并且返回的图片句柄将无效（如果在后续函数调用中使用，则会导致进一步的 X
+错误）。</p><p>正确响应这些错误非常复杂，超出了本教程的范围。但是这些错误是无害的，只会导致在控制台上打印错误消息。当您的应用程序返回到事件循环时，您将收到有关
+窗口已被删除的消息。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#75715e>// Create a Render picture so we can reference the window contents.
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// We need to set the subwindow mode to IncludeInferiors, otherwise child widgets
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// in the window won&#39;t be included when we draw it, which is not what we want.
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>XRenderPictureAttributes pa;
+</span></span><span style=display:flex><span>pa.subwindow_mode <span style=color:#f92672>=</span> IncludeInferiors; <span style=color:#75715e>// Don&#39;t clip child widgets
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span>Picture picture <span style=color:#f92672>=</span> XRenderCreatePicture( dpy, wId, format, CPSubwindowMode, <span style=color:#f92672>&amp;</span>pa );
+</span></span></code></pre></div><p>为了避免每次要绘制窗口时都必须执行这些步骤中的每一个，您可能希望将此信息放在一个类中以便快速访问。您还可以在同一个类中放置一个 draw() 方法，用于
+在 QPixmap/QWidget 上绘制窗口。</p><h3 id=正确处理shaped窗口>正确处理shaped窗口</h3><p>窗口的backing pixmap始终是矩形的，但是如果窗口具有非矩形形状，我们不希望在绘制它时最终复制不属于窗口的像素（这些像素未定义）。为了避
+免这样做，我们将图片的剪辑区域设置为窗口形状区域。这样做需要使用 XFixes 扩展，你需要查询它，就像你对合成所做的一样。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#75715e>// Create a copy of the bounding region for the window
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>XserverRegion region <span style=color:#f92672>=</span> XFixesCreateRegionFromWindow( dpy, wId, WindowRegionBounding );
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// The region is relative to the screen, not the window, so we need to offset
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// it with the windows position
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>XFixesTranslateRegion( dpy, region, <span style=color:#f92672>-</span>x, <span style=color:#f92672>-</span>y );
+</span></span><span style=display:flex><span>XFixesSetPictureClipRegion( dpy, picture, <span style=color:#ae81ff>0</span>, <span style=color:#ae81ff>0</span>, region );
+</span></span><span style=display:flex><span>XFixesDestroyRegion( dpy, region );
+</span></span></code></pre></div><p>当您使用 Xrender 绘制像素图时, 您为源和目标可绘制对象提供图片，并且源和目标图片都可以设置剪辑区域。因此，如果您在绘制窗口时不打算缩
+放窗口，则可以在目标图片中设置剪辑区域.</p><p>不要忘记，因为该区域只是一个副本，所以当窗口调整大小或窗口形状改变时，您需要更新它</p><p>XShape 扩展可以在窗口形状更改时提供通知，但只有在您明确要求时才会这样做。通过调用 XShapeSelectInput() 来告诉 XShape 发送此类通知：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span>XShapeSelectInput( dpy, wId, ShapeNotifyMask );
+</span></span></code></pre></div><p>有关如何接收实际事件的信息，请参阅有关拦截 X 事件的部分</p><h3 id=在-qwidget-或-qpixmap-上绘制窗口>在 QWidget 或 QPixmap 上绘制窗口</h3><p>我们现在拥有使用 Xrender 扩展程序绘制窗口所需的所有信息，为此我们已经为窗口创建并准备了源图片。我们将用来绘制窗口的 Xrender 函数
+是 XRenderComposite()，它在 Xrender 头文件中定义如下：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>void</span> <span style=color:#a6e22e>XRenderComposite</span> (Display   <span style=color:#f92672>*</span>dpy,
+</span></span><span style=display:flex><span>                       <span style=color:#66d9ef>int</span>       op,
+</span></span><span style=display:flex><span>                       Picture   src,
+</span></span><span style=display:flex><span>                       Picture   mask,
+</span></span><span style=display:flex><span>                       Picture   dst,
+</span></span><span style=display:flex><span>                       <span style=color:#66d9ef>int</span>       src_x,
+</span></span><span style=display:flex><span>                       <span style=color:#66d9ef>int</span>       src_y,
+</span></span><span style=display:flex><span>                       <span style=color:#66d9ef>int</span>       mask_x,
+</span></span><span style=display:flex><span>                       <span style=color:#66d9ef>int</span>       mask_y,
+</span></span><span style=display:flex><span>                       <span style=color:#66d9ef>int</span>       dst_x,
+</span></span><span style=display:flex><span>                       <span style=color:#66d9ef>int</span>       dst_y,
+</span></span><span style=display:flex><span>                       <span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span>  width,
+</span></span><span style=display:flex><span>                       <span style=color:#66d9ef>unsigned</span> <span style=color:#66d9ef>int</span>  height);
+</span></span></code></pre></div><p>如您所见，此函数需要源图片、目标图片和可选的蒙版图片。在我们的例子中，我们需要一个mask，但是我们需要一个目标图片。
+我们想在 QWidget 或 QPixmap 上绘制窗口，结果这两种类型的对象都已经有渲染图片（如果 Qt 是用 Xft/Xrender 支持构建的）。通过调用QWidget或
+QPixmap中的x11RenderHandle()方法来访问图片</p><p>XRenderComposite() 的另一个重要参数是第二个参数 op，它指定应如何组合源像素和目标像素。出于我们的目的，只有两个渲染操作是我们感兴趣的——
+PictOpSrc 和 PictOpOver。
+PictOpSrc 指定目标像素应替换为源像素 (dst = src)，包括 alpha 值。 PictOpOver 对应于 Porter/Duff Over 运算符，它指定 Xrender 应使用源像素
+中的 alpha 值将它们与目标像素混合（dst = src Over dst）。</p><p>所以 PictOpSrc 不会混合窗口，而 PictOpOver 会。 PictOpSrc 速度更快，并且几乎总能保证加速，因此当窗口没有 alpha 通道时，我们会想要使用它。当它有
+一个 alpha 通道时，我们将要使用 PictOpOver。</p><p>在以下示例中，dest 必须是 QWidget 或 QPixmap。 destX 和 destY 是小部件或像素图中要绘制窗口的 X 和 Y 坐标
+// [Fill the destination widget/pixmap with whatever you want to use as a background here]
+XRenderComposite( dpy, hasAlpha ? PictOpOver : PictOpSrc, picture, None,
+dest.x11RenderHandle(), 0, 0, 0, 0, destX, destY, width, height );</p><h2 id=追踪窗口的damage和其他变化>追踪窗口的damage和其他变化</h2><p>如果您只对创建窗口的一次性快照感兴趣，而对在窗口更改时更新快照不感兴趣，则可以跳过此部分。如果我们想跟踪一个窗口的损坏，我们需要做的第一件事是查询 X 服务器
+以获取damage扩展，这一次我们需要保存事件库以备后用。请继续阅读以找出原因。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>int</span> damage_event, damage_error; <span style=color:#75715e>// The event base is important here
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>XDamageQueryExtension( dpy, <span style=color:#f92672>&amp;</span>damage_event, <span style=color:#f92672>&amp;</span>damage_error );
+</span></span></code></pre></div><p>一旦我们确定 X 服务器支持damage扩展，我们需要为我们感兴趣的每个窗口创建一个damage句柄。 Xdamage 可以通过多种方式向窗口报告更改，在这种情况下，我们将指定每当窗口
+状态从未损坏变为损坏时我们想要一个事件。当不再需要窗口的损坏事件时，必须通过调用 XDamageDestroy() 来销毁分配的句柄。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#75715e>// Create a damage handle for the window, and specify that we want an event whenever the
+</span></span></span><span style=display:flex><span><span style=color:#75715e>// damage state changes from not damaged to damaged.
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>Damage damage <span style=color:#f92672>=</span> XDamageCreate( dpy, wId, XDamageReportNonEmpty );
+</span></span></code></pre></div><p>您在这里会注意到的一件事是，与大多数提供通知的扩展不同，Xdamage 提供损坏通知对象，而不是公开 XDamageSelectInput() 请求。您将回忆起关于shaped窗口的部分，XShape
+扩展提供了一个 XShapeSelectInput() 请求来请求窗口的形状更改通知。关于 Xdamage 的另一件有趣的事情是，它不仅可以跟踪对 Windows 的损坏，还可以跟踪对像素图的损
+坏，如果您想为此使用它的话。</p><h3 id=在收到-x-事件时对其进行拦截>在收到 X 事件时对其进行拦截</h3><p>X 不断地通过网络套接字向应用程序发送事件，在那里它们被解组并插入到事件队列中。应用程序通过调用 XNextEvent() 一次一个地将事件从队列中拉出。在 Qt 应用程序中，所有这
+些都由 QApplication 处理，但在这种特殊情况下，我们希望在 QApplication 处理它之前查看每个接收到的 X 事件。</p><p>事实证明，有一种方法可以做到这一点——实际上有两种方法。在 Qt 应用程序中，这是通过重新实现 QApplication::x11EventFilter( XEvent * ) 来完成的，每次将事件从队列
+中拉出时都会调用它，但在 Qt 对其进行处理之前。我们甚至可以选择是否应该吞下事件（通过返回 true），或者告诉 Qt 它应该继续处理事件（通过返回 false）。</p><p>在 KDE 应用程序中，我们还可以选择调用 KApplication::installX11EventFilter( QWidget * )，它告诉 KApplication 将每个接收到的 X 事件转发到您指定的小部件中的
+x11Event( XEvent * ) 成员函数。</p><p>现在我之前提到过为damage扩展保存事件基础很重要。现在是解释您需要它的时候了。每个 X 事件都有一个唯一的编号来标识该事件，核心协议中的事件编号从基数零开始.
+由于可以有任意数量的 X 扩展并且每个扩展可以添加任意数量的事件，因此扩展提供的事件的基数取决于 X 实现，并且必须在运行时从 X 服务器获取。
+实际的事件id通过基本事件id加上来自扩展的常量标识计算而来，您将在下面的示例中看到这是如何工作的。</p><p>对于每个 X 事件都有一个相应的结构，而 XEvent 是所有可能的事件结构的并集。第一个成员，对于所有结构都是通用的，是包含事件编号的类型，它告诉我们结构包含哪种类型的事件。
+XEvent 结构必须转换为与事件匹配的适当结构，例如如果 type 是 ConfigureNotify，则 XEvent 应转换为 XConfigureEvent。</p><p>下面是一个函数的示例实现，它接收 X 事件，检查类型成员，并处理damage、shape和配置事件：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>bool</span> <span style=color:#a6e22e>x11EventFilter</span>( XEvent <span style=color:#f92672>*</span>event )
+</span></span><span style=display:flex><span>{
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>if</span> ( event<span style=color:#f92672>-&gt;</span>type <span style=color:#f92672>==</span> damage_event <span style=color:#f92672>+</span> XDamageNotify ) {
+</span></span><span style=display:flex><span>        XDamageNotifyEvent <span style=color:#f92672>*</span>e <span style=color:#f92672>=</span> <span style=color:#66d9ef>reinterpret_cast</span><span style=color:#f92672>&lt;</span>XDamageNotifyEvent<span style=color:#f92672>*&gt;</span>( event );
+</span></span><span style=display:flex><span>        <span style=color:#75715e>// e-&gt;drawable is the window ID of the damaged window
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        <span style=color:#75715e>// e-&gt;geometry is the geometry of the damaged window
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        <span style=color:#75715e>// e-&gt;area     is the bounding rect for the damaged area
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        <span style=color:#75715e>// e-&gt;damage   is the damage handle returned by XDamageCreate()
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span>        <span style=color:#75715e>// Subtract all the damage, repairing the window.
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        XDamageSubtract( dpy, e<span style=color:#f92672>-&gt;</span>damage, None, None );
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> ( event<span style=color:#f92672>-&gt;</span>type <span style=color:#f92672>==</span> shape_event <span style=color:#f92672>+</span> ShapeNotify ) {
+</span></span><span style=display:flex><span>        XShapeEvent <span style=color:#f92672>*</span>e <span style=color:#f92672>=</span> <span style=color:#66d9ef>reinterpret_cast</span><span style=color:#f92672>&lt;</span>XShapeEvent<span style=color:#f92672>*&gt;</span>( event );
+</span></span><span style=display:flex><span>        <span style=color:#75715e>// It&#39;s probably safe to assume that the window shape region
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        <span style=color:#75715e>// is invalid at this point...
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>else</span> <span style=color:#66d9ef>if</span> ( event<span style=color:#f92672>-&gt;</span>type <span style=color:#f92672>==</span> ConfigureNotify ) {
+</span></span><span style=display:flex><span>        XConfigureEvent <span style=color:#f92672>*</span>e <span style=color:#f92672>=</span> <span style=color:#f92672>&amp;</span>event<span style=color:#f92672>-&gt;</span>xconfigure;
+</span></span><span style=display:flex><span>        <span style=color:#75715e>// The windows size, position or Z index in the stacking
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>        <span style=color:#75715e>// order has changed
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#66d9ef>return</span> false;
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>请记住，队列中的同一个窗口可能有多个相同类型的事件，因此您应该等到处理完所有这些事件后再采取任何行动。这也很重要，因为队列中对特定窗口可能会有出现damage事件之后紧接着出现
+DestroyNotify事件。</p><p>请注意，在上面的示例中，所有损坏都从窗口中减去，但实际损坏区域被丢弃。在这个例子中，损坏区域是从损坏对象中检索出来的，并设置为图片的剪辑区域：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#75715e>// Create an empty region
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>XserverRegion region <span style=color:#f92672>=</span> XFixesCreateRegion( dpy, <span style=color:#ae81ff>0</span>, <span style=color:#ae81ff>0</span> );
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// Copy the damage region to region, subtracting it from the windows&#39; damage
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>XDamageSubtract( dpy, e<span style=color:#f92672>-&gt;</span>damage, None, region );
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// Offset the region with the windows&#39; position
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>XFixesTranslateRegion( dpy, region, e<span style=color:#f92672>-&gt;</span>geometry.x, e<span style=color:#f92672>-&gt;</span>geometry.y );
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// Set the region as the clip region for the picture
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>XFixesSetPictureClipRegion( dpy, picture, <span style=color:#ae81ff>0</span>, <span style=color:#ae81ff>0</span>, region );
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// Free the region
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>XFixesDestroyRegion( dpy, region );
+</span></span></code></pre></div><p>这将导致在绘制窗口时仅复制损坏的像素，但如果您在绘制窗口时缩放窗口，这可能不是一个选项。下一节将介绍缩放窗口。</p><h2 id=先进理念>先进理念</h2><h3 id=使用变换矩阵-缩放和旋转>使用变换矩阵：缩放和旋转</h3><p>如果我们想创建一个窗口的缩略图，我们需要缩放它，所以我将简要提到如何使用xrender扩展来做到这一点。使用 Xrender 进行的优点是它是在服务器端完成的，因此不涉及图像传输。这
+非常重要，尤其是对于远程 X 连接.</p><p>我们要做的是为图片设置一个变换矩阵，它会导致内容在绘制时缩放到我们想要的大小。 XTransform 的工作方式与 QWMatrix 大致相同。
+注意一下矩阵的计算需要同时除以scale 保证最后一行为0，0, 1齐次坐标显示。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>double</span> scale <span style=color:#f92672>=</span> <span style=color:#ae81ff>.5</span>; <span style=color:#75715e>// We&#39;ll scale the window to 50% of its original size
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// Scaling matrix
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>XTransform xform <span style=color:#f92672>=</span> {{
+</span></span><span style=display:flex><span>    { XDoubleToFixed( <span style=color:#ae81ff>1</span> ), XDoubleToFixed( <span style=color:#ae81ff>0</span> ), XDoubleToFixed(     <span style=color:#ae81ff>0</span> ) },
+</span></span><span style=display:flex><span>    { XDoubleToFixed( <span style=color:#ae81ff>0</span> ), XDoubleToFixed( <span style=color:#ae81ff>1</span> ), XDoubleToFixed(     <span style=color:#ae81ff>0</span> ) },
+</span></span><span style=display:flex><span>    { XDoubleToFixed( <span style=color:#ae81ff>0</span> ), XDoubleToFixed( <span style=color:#ae81ff>0</span> ), XDoubleToFixed( scale ) }
+</span></span><span style=display:flex><span>}};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>XRenderSetPictureTransform( dpy, picture, <span style=color:#f92672>&amp;</span>xform );
+</span></span></code></pre></div><p>由于 XTransform 是一个投影变换矩阵，因此缩放并不是唯一可能的变换。例如。下面是将图片顺时针旋转 30 度的矩阵示例。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#66d9ef>double</span> angle <span style=color:#f92672>=</span> M_PI <span style=color:#f92672>/</span> <span style=color:#ae81ff>180</span> <span style=color:#f92672>*</span> <span style=color:#ae81ff>30</span>; <span style=color:#75715e>// 30 degrees
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span><span style=color:#66d9ef>double</span> sina <span style=color:#f92672>=</span> std<span style=color:#f92672>::</span>sin( angle );
+</span></span><span style=display:flex><span><span style=color:#66d9ef>double</span> cosa <span style=color:#f92672>=</span> std<span style=color:#f92672>::</span>cos( angle );
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// Rotation matrix
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>XTransform xform <span style=color:#f92672>=</span> {{
+</span></span><span style=display:flex><span>    { XDoubleToFixed(  cosa ), XDoubleToFixed( sina ), XDoubleToFixed( <span style=color:#ae81ff>0</span> ) },
+</span></span><span style=display:flex><span>    { XDoubleToFixed( <span style=color:#f92672>-</span>sina ), XDoubleToFixed( cosa ), XDoubleToFixed( <span style=color:#ae81ff>0</span> ) },
+</span></span><span style=display:flex><span>    { XDoubleToFixed(     <span style=color:#ae81ff>0</span> ), XDoubleToFixed(    <span style=color:#ae81ff>0</span> ), XDoubleToFixed( <span style=color:#ae81ff>1</span> ) }
+</span></span><span style=display:flex><span>}};
+</span></span></code></pre></div><p>请注意，旋转中心是左上角，而不是图片的中心，因此您在绘制图片时需要偏移图片以进行补偿。由于生成的图像看起来相当参差不齐，因此您可能需要在进行转换时使用过滤器。所有渲染实现
+都需要支持两个过滤器——最近邻过滤器和双线性过滤器，但可以支持任意数量的过滤器，例如高斯甚至任意卷积过滤器。 XRenderQueryFilters() 返回渲染实现支持的所有过滤器的列表。</p><p>在这个例子中，我们将告诉 render 使用双线性过滤器。当您使用过滤器时，您可能希望使用 PictOpOver 作为渲染操作，无论源图片是否具有 alpha 通道，因为在应用过滤器后边缘可
+能最终具有 alpha 值。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span>XRenderSetPictureFilter( dpy, picture, FilterBilinear, <span style=color:#ae81ff>0</span>, <span style=color:#ae81ff>0</span> );
+</span></span></code></pre></div><p>您应该记住，每次渲染图片时都会实时应用转换，因此缓存结果图像有一定的价值。</p><h3 id=防止在窗口隐藏-销毁时释放backing-pixmap>防止在窗口隐藏/销毁时释放backing pixmap</h3><p>如果您希望窗口内容在窗口被销毁后或在窗口被调整大小（但尚未重绘）后仍然可用，您可以增加backing pixmap引用计数以防止它被释放：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span>Pixmap windowPix <span style=color:#f92672>=</span> XCompositeNameWindowPixmap( dpy, wId );
+</span></span></code></pre></div><p>如您所见，此函数还返回窗口当前使用的backing pixmap的句柄，该句柄与窗口 ID 不同。与返回的像素图句柄不同，窗口 ID 在窗口被销毁后将无效.
+要使此函数有用，您必须在 XRenderCreatePicture() 之前调用它，并在该调用中用 windowPix 替换 wId 参数。</p><p>重要的是要记住，在执行此操作后，图片将引用这个特定的backing pixmap，而不是窗口的当前backing pixmap（它始终可以由窗口 ID 引用）
+需要注意的是，当窗口被调整大小时，合成器为具有新大小的窗口分配一个新的backing pixmap，当发生这种情况时，图片将继续引用包含窗口图像的现在
+陈旧的支持像素图，就像它在调整大小之前一样.</p><p>因此，您必须跟踪窗口的调整大小事件，当调整大小时，您必须取消引用backing pixmap（使用 XFreePixmap())并销毁图片，然后调用 XCompositeNameWindowPixmap()
+以获取新backing pixmap的句柄，并重新创建图片.</p><p>要获取窗口的调整大小事件，您必须进行此调用以告诉 X 服务器您对这些类型的事件感兴趣：</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span>XSelectInput( dpy, wId, StructureNotifyMask );
+</span></span></code></pre></div><p>有关如何接收实际事件的信息，请参阅有关在 KDE 应用程序中拦截 X 事件的部分。您正在寻找的事件是<a href=https://tronche.com/gui/x/xlib/events/window-state-change/configure.html>ConfigureNotify</a>.
+当窗口被销毁时，不要忘记取消引用窗口像素图，否则你会泄漏backing pixmap。</p><h3 id=将窗口内容转换为-qimage>将窗口内容转换为 QImage</h3><p>在某些情况下，抓取窗口的快照并将其保存到磁盘可能会很有趣。一种方法是创建一个与窗口大小相同的 QPixmap，将内容复制到 pixmap，然后使用 QPixmap::convertToImage()。
+这种方法的问题在于，由于 Qt3（和 Qt4 TP1）对 alpha 通道的支持有限，执行此操作时窗口中的 alpha 通道将丢失。</p><p>当窗口有 alpha 通道时，目前唯一的选择是使用 XGetImage() 将窗口内容转换为 XImage，然后使用 XRenderPictFormat 中的信息手动将 XImage 转换为 QImage。执行此操
+作时请记住，ARGB32 视觉对象是预乘 alpha 格式，而 QImage 格式不是。</p><div class=highlight><pre tabindex=0 style=color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c++ data-lang=c++><span style=display:flex><span><span style=color:#75715e>// Convert the window contents to an XImage
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>XImage <span style=color:#f92672>*</span>image <span style=color:#f92672>=</span> XGetImage( dpy, wId, <span style=color:#ae81ff>0</span>, <span style=color:#ae81ff>0</span>, width, height, AllPlanes, ZPixmap );
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#75715e>// [Convert image to a QImage]
+</span></span></span><span style=display:flex><span><span style=color:#75715e></span>
+</span></span><span style=display:flex><span>XDestroyImage( image );
+</span></span></code></pre></div><p>进行转换时，您需要考虑窗口形状区域，以防窗口具有非矩形形状。 XFixesFetchRegion() 将以 XRectangles 数组的形式返回一个 XserverRegion。如果您想避免创建
+XserverRegion，您也可以使用 XShapeGetRectangles()。 XGetImage()、XFixesFetchRegion() 和 XShapeGetRectangles() 都是同步调用</p><h3 id=自动重定向和手动重定向的区别>自动重定向和手动重定向的区别</h3><p>在本教程中，我们一直在使用自动重定向，因为目标是演示如何使用 Composite 来访问窗口内容，而不管它们是否被其他窗口覆盖。
+一个不仅对这样做感兴趣，而且对构建呈现给用户的屏幕图像感兴趣的应用程序将希望使用手动重定向。自动重定向和手动重定向的区别在于，使用手动重定向，窗口内容将被重定向到屏幕外存
+储，但在修改时不会在屏幕上自动更新。</p><p>如果您正在编写合成管理器，您将因此需要使用手动重定向。为了创建屏幕演示，您还需要为根窗口创建渲染图片，并手动在其上绘制窗口，同时考虑到窗口层次结构。这样做您将完全控制演示
+文稿，这使您能够绘制额外的装饰，例如阴影或镜头眩光。然而，这是另一个教程的主题。</p><h2 id=参考>参考</h2><ul><li><a href=https://www.x.org/releases/current/doc/renderproto/renderproto.txt>The X Rendering Extension</a></li><li><a href=https://www.x.org/releases/X11R7.5/doc/compositeproto/compositeproto.txt>Composite Extension</a></li><li><a href=https://www.x.org/releases/X11R7.5/doc/damageproto/damageproto.txt>The DAMAGE Extension</a></li><li><a href=https://www.x.org/releases/current/doc/fixesproto/fixesproto.txt>The XFIXES Extension</a></li></ul></content><p><a href=https://zorowk.github.io/blog/compositor/>#compositor</a></p></main><footer></footer></body></html>
