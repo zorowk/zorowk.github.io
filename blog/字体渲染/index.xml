@@ -1,8 +1,36 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>字体渲染 on Why</title><link>https://zorowk.github.io/blog/%E5%AD%97%E4%BD%93%E6%B8%B2%E6%9F%93/</link><description>Recent content in 字体渲染 on Why</description><generator>Hugo</generator><language>en-US</language><copyright>Copyright © 2020, Jane Doe.</copyright><lastBuildDate>Thu, 15 Aug 2024 00:00:00 +0800</lastBuildDate><atom:link href="https://zorowk.github.io/blog/%E5%AD%97%E4%BD%93%E6%B8%B2%E6%9F%93/index.xml" rel="self" type="application/rss+xml"/><item><title>缩放和字体渲染问题</title><link>https://zorowk.github.io/%E7%BC%A9%E6%94%BE%E5%92%8C%E5%AD%97%E4%BD%93%E6%B8%B2%E6%9F%93%E9%97%AE%E9%A2%98/</link><pubDate>Thu, 15 Aug 2024 00:00:00 +0800</pubDate><guid>https://zorowk.github.io/%E7%BC%A9%E6%94%BE%E5%92%8C%E5%AD%97%E4%BD%93%E6%B8%B2%E6%9F%93%E9%97%AE%E9%A2%98/</guid><description>概述 此页是总览, 主要是收集的研究资料, 产生的实验和扩展内容将在其他页面实现, 主要针对linux 字体渲染内容给予扩展, 字体渲染在任何平台的评价都是猛兽,需要更多的专业知识来驾驭.
-问题 freetype2使用mac类似的字体渲染算法后, kde wayland环境4k缩放150%之后失效了 缩放存在着次表面舍入问题以及其他的像素逻辑坐标和物理坐标对齐问题 测试工具如下: aligned-scale-test fractional-scaling freeype2只是进行最后的字形光栅化, 由cpu来完成, 目前也有SDF这样的完全由GPU光栅化器 完成的过程, 字形看起来更清晰 锐利(sharp).
-目前可以明确两点
-在渲染堆栈中窗口内容的字体渲染主要通过ui库来完成和合成器的关系不大 字形光栅化存在基于cpu和GPU的两条路径 后续看看GTK 和 Qt两套ui库分别如何完成的字体渲染过程以及遵循的策略是什么(最大限度遵循字体设计师给出的 字形hint(apple)还是遵循以易于阅读作为字形渲染的策略(window))
-文本如何呈现 我们在CPU上修改这些字形的形状, 对他们进行变换, 而字体的大小进行resize, 他在CPU上将纹理上穿到GPU并进行blit处理 问题是如果你想更改字体的大小,则必须重做. 如果有动画文本,则必须重新调整大小.
-我们需要弄清楚如何在高分辨率下做的更好. 也就是更高dpi的设备.
-过去30多年以来, 每个人都在cpu上做, 这就是我们所说的基于覆盖的antialising 所以基本上你画出像素, 在形状上看有多少, 像素被覆盖的百分比是多少, 然后根据覆盖率分配数字, 灰色阴影
-字体格式 openType trueType GPU文本渲染技术 GPU text rendering techniques. GPU Text Rendering Techniques Part II GLyphy: high-quality glyph rendering using OpenGL ES2 shaders - Behdad Esfahbod multi-channel signed distance field generator msdf font atlas generator</description></item></channel></rss>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>字体渲染 on Why</title><link>https://zorowk.github.io/blog/%E5%AD%97%E4%BD%93%E6%B8%B2%E6%9F%93/</link><description>Recent content in 字体渲染 on Why</description><generator>Hugo</generator><language>en-US</language><copyright>Copyright © 2020, Jane Doe.</copyright><lastBuildDate>Thu, 15 Aug 2024 00:00:00 +0800</lastBuildDate><atom:link href="https://zorowk.github.io/blog/%E5%AD%97%E4%BD%93%E6%B8%B2%E6%9F%93/index.xml" rel="self" type="application/rss+xml"/><item><title>缩放和字体渲染问题</title><link>https://zorowk.github.io/%E7%BC%A9%E6%94%BE%E5%92%8C%E5%AD%97%E4%BD%93%E6%B8%B2%E6%9F%93%E9%97%AE%E9%A2%98/</link><pubDate>Thu, 15 Aug 2024 00:00:00 +0800</pubDate><guid>https://zorowk.github.io/%E7%BC%A9%E6%94%BE%E5%92%8C%E5%AD%97%E4%BD%93%E6%B8%B2%E6%9F%93%E9%97%AE%E9%A2%98/</guid><description>&lt;h2 id="概述"&gt;概述&lt;/h2&gt;
+&lt;p&gt;此页是总览, 主要是收集的研究资料, 产生的实验和扩展内容将在其他页面实现, 主要针对linux
+字体渲染内容给予扩展, 字体渲染在任何平台的评价都是猛兽,需要更多的专业知识来驾驭.&lt;/p&gt;
+&lt;h2 id="问题"&gt;问题&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;freetype2使用mac类似的字体渲染算法后, kde wayland环境4k缩放150%之后失效了&lt;/li&gt;
+&lt;li&gt;缩放存在着次表面舍入问题以及其他的像素逻辑坐标和物理坐标对齐问题 测试工具如下:
+&lt;a href="https://git.sr.ht/~vyivel/aligned-scale-test/tree"&gt;aligned-scale-test&lt;/a&gt;
+&lt;a href="https://gitlab.freedesktop.org/kennylevinsen/fractional-scaling"&gt;fractional-scaling&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;freeype2只是进行最后的字形光栅化, 由cpu来完成, 目前也有SDF这样的完全由GPU光栅化器
+完成的过程, 字形看起来更清晰 锐利(sharp).&lt;/p&gt;
+&lt;p&gt;目前可以明确两点&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;在渲染堆栈中窗口内容的字体渲染主要通过ui库来完成和合成器的关系不大&lt;/li&gt;
+&lt;li&gt;字形光栅化存在基于cpu和GPU的两条路径&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;后续看看GTK 和 Qt两套ui库分别如何完成的字体渲染过程以及遵循的策略是什么(最大限度遵循字体设计师给出的
+字形hint(apple)还是遵循以易于阅读作为字形渲染的策略(window))&lt;/p&gt;
+&lt;h2 id="文本如何呈现"&gt;文本如何呈现&lt;/h2&gt;
+&lt;p&gt;我们在CPU上修改这些字形的形状, 对他们进行变换, 而字体的大小进行resize, 他在CPU上将纹理上穿到GPU并进行blit处理
+问题是如果你想更改字体的大小,则必须重做. 如果有动画文本,则必须重新调整大小.&lt;/p&gt;
+&lt;p&gt;我们需要弄清楚如何在高分辨率下做的更好. 也就是更高dpi的设备.&lt;/p&gt;
+&lt;p&gt;过去30多年以来, 每个人都在cpu上做, 这就是我们所说的基于覆盖的antialising 所以基本上你画出像素, 在形状上看有多少,
+像素被覆盖的百分比是多少, 然后根据覆盖率分配数字, 灰色阴影&lt;/p&gt;
+&lt;h2 id="字体格式"&gt;字体格式&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a href="https://learn.microsoft.com/en-us/typography/opentype/"&gt;openType&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;&lt;a href="https://developer.apple.com/fonts/TrueType-Reference-Manual/RM02/Chap2.html"&gt;trueType&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id="gpu文本渲染技术"&gt;GPU文本渲染技术&lt;/h2&gt;
+&lt;p&gt;&lt;a href="https://www.monotype.com/resources/expertise/gpu-text-rendering-techniques"&gt;GPU text rendering techniques.&lt;/a&gt;
+&lt;a href="https://www.monotype.com/resources/expertise/gpu-text-rendering-techniques-part-ii"&gt;GPU Text Rendering Techniques Part II&lt;/a&gt;
+&lt;a href="https://vimeo.com/83732058"&gt;GLyphy: high-quality glyph rendering using OpenGL ES2 shaders - Behdad Esfahbod&lt;/a&gt;
+&lt;a href="https://github.com/Chlumsky/msdfgen"&gt;multi-channel signed distance field generator&lt;/a&gt;
+&lt;a href="https://github.com/Chlumsky/msdf-atlas-gen"&gt;msdf font atlas generator&lt;/a&gt;&lt;/p&gt;</description></item></channel></rss>
