@@ -1,6 +1,6 @@
 :root {
   color-scheme: light dark;
-  --content-width: 46rem;
+  --content-width: 860px;
   --background: #fafaf9;
   --surface: #f2f2ef;
   --surface-strong: #e8e8e3;
@@ -44,9 +44,10 @@ html {
 }
 
 body {
+  box-sizing: content-box;
   max-width: var(--content-width);
   margin: auto;
-  padding: 1.5rem clamp(1rem, 4vw, 2rem) 4rem;
+  padding: 20px;
   background: var(--background);
   color: var(--text);
   font-family: var(--sans);
@@ -163,47 +164,29 @@ blockquote {
 }
 
 code,
-pre,
+pre {
+  font-family: monospace;
+}
+
+code {
+  padding: 2px;
+  border-radius: 3px;
+}
+
+pre {
+  overflow-x: auto;
+}
+
 kbd,
 samp {
   font-family: var(--mono);
 }
 
-code {
-  padding: 0.12em 0.35em;
-  border-radius: 0.3rem;
-  background: var(--code-background);
-  font-size: 0.9em;
-}
-
-pre {
+.highlight,
+.code {
+  margin-block: 1em;
   overflow-x: auto;
-  margin: 1.25rem 0;
-  padding: 1rem;
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  background: var(--code-background);
-  line-height: 1.55;
-}
-
-pre code {
-  padding: 0;
-  background: transparent;
-  font-size: inherit;
-}
-
-.org-src-container {
-  margin: 1.25rem 0;
-}
-
-.linenr {
-  padding-right: 0.75rem;
-  color: var(--muted);
-  font-size: 0.85em;
-}
-
-.code-highlighted {
-  background: var(--surface-strong);
+  border-radius: 3px;
 }
 
 table {
