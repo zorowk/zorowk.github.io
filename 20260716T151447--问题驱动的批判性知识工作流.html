@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>问题驱动的批判性知识工作流</title>
+<meta name="author" content="zorowk" />
+<meta name="generator" content="Org Mode" />
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<link rel="stylesheet" href="/style.css"/>
+</head>
+<body>
+<div id="preamble" class="status">
+<header><nav><a href="/">Home</a></nav></header>
+</div>
+<div id="content" class="content">
+<h1 class="title">问题驱动的批判性知识工作流</h1>
+<div id="outline-container-org7cd10d9" class="outline-2">
+<h2 id="org7cd10d9">Goal</h2>
+<div class="outline-text-2" id="text-org7cd10d9">
+<p>
+建立一个问题驱动的个人研究工作流，使 AI 对话和工程调试中的观察、问题、证据、推理与结论能够长期复用，
+同时避免 Denote、GTD 和 HyWiki 相互混杂或自动制造知识与任务垃圾。
+</p>
+</div>
+</div>
+<div id="outline-container-org8b8768e" class="outline-2">
+<h2 id="org8b8768e">Question</h2>
+<div class="outline-text-2" id="text-org8b8768e">
+<p>
+如何把批判性思维融入 Denote Scribe，并在不让记录系统过度承担任务管理和知识库职责的前提下，让未解决问
+题推动研究，让已经形成的稳定理解进入 HyWiki？
+</p>
+</div>
+</div>
+<div id="outline-container-org87aa566" class="outline-2">
+<h2 id="org87aa566">Context</h2>
+<div class="outline-text-2" id="text-org87aa566">
+<p>
+当前系统包含三个主要部分：Denote 保存每日讨论、调试和研究过程；HyWiki 组织长期稳定的概念；Emacs GTD
+管理需要投入行动的事项。Denote Scribe 已采用 Goal、Question、Evidence、Hypotheses、Investigation、
+Analysis、Conclusion 和 Open Questions 等批判性结构，并以 Git 提交中的 <code>🔒</code> 标记周期性 Review。
+</p>
+
+<p>
+个人学习方式主要由具体问题驱动，例如追问 Emacs redisplay 为什么使用 current/desired glyph matrix、
+KWin 为什么采用某种 repaint strategy，以及复数 FFT 为什么包含 negative frequency。目标不是收集术语或
+百科资料，而是形成能够解释机制和支持工程决策的个人理解。
+</p>
+</div>
+</div>
+<div id="outline-container-org2167c88" class="outline-2">
+<h2 id="org2167c88">Evidence</h2>
+<div class="outline-text-2" id="text-org2167c88">
+<ol class="org-ol">
+<li>按时间记录“今天讨论了什么”难以表达问题、证据、推理和结论之间的关系，后续复用价值有限。</li>
+<li>工程调试天然具有批判性结构：现象引出问题，trace 或实验形成证据，对候选解释进行比较，最后得到暂时
+或稳定结论。</li>
+<li>术语出现并不等于已经理解；如果见到 glyph matrix、FFT 或 gamma 就创建页面，HyWiki 容易膨胀为低质量
+百科集合。</li>
+<li>问题也不等于行动；如果每个兴趣问题都自动进入 GTD，任务列表会被“了解某概念”一类没有明确投入承诺的
+事项淹没。</li>
+<li>已有 Critical Note 模板能够保存核心问题和 Open Questions；已有 HyWiki 模板包含 Context、
+Definition、My Understanding、Evidence、Reasoning 和 Boundaries，适合保存稳定理解。</li>
+<li>当前自动化可以按距离最近 <code>🔒</code> 提交的数量触发 Review，并允许一次有效 Review 不生成任何 HyWiki 页面。</li>
+</ol>
+
+<p>
+以上证据来自本次工作流设计讨论和现有实现检查，不包含长期使用统计。
+</p>
+</div>
+</div>
+<div id="outline-container-orgabaedd6" class="outline-2">
+<h2 id="orgabaedd6">Hypotheses</h2>
+<div class="outline-text-2" id="text-orgabaedd6">
+<ol class="org-ol">
+<li>概念优先：从每篇 Denote 中直接提取术语并创建 HyWiki 页面。预测是页面增长快，但重复、浅薄和缺少个
+人理解的内容也会快速增加。</li>
+<li>任务优先：把提取出的所有问题直接创建为 GTD TODO。预测是问题不会遗失，但 GTD 会混入大量好奇心和长
+期研究方向，失去行动系统的可信度。</li>
+<li>独立 Question Inbox：为所有问题创建单独页面，再分流到 GTD 或 HyWiki。预测是追踪能力增强，但会立即
+增加第四套存储、状态和同步规则。</li>
+<li>Review Gate：问题首先留在 Denote；周期性 AI Review 先判断问题状态，再把值得主动推进的问题建议给
+GTD，把已经形成稳定解释的概念保存到 HyWiki。预测是系统边界清楚，自动生成量受控，但需要高质量的语
+义判断。</li>
+</ol>
+</div>
+</div>
+<div id="outline-container-org7d141c1" class="outline-2">
+<h2 id="org7d141c1">Investigation</h2>
+<div class="outline-text-2" id="text-org7d141c1">
+<p>
+对上述方案按职责边界、噪声风险、可追溯性和维护成本进行了比较。
+</p>
+
+<p>
+Denote 被定义为研究历史层，保存问题产生的上下文、假设、实验、失败路径、证据和当前结论。GTD 被定义为
+行动承诺层，只接收具有明确下一步且值得投入的问题。HyWiki 被定义为稳定知识层，只保存已经能够用自己的
+模型解释、具有证据和边界、并能支持未来问题或决策的概念。
+</p>
+
+<p>
+周期机制也从“每五次提交强制提取 HyWiki 页面”改为“每五次提交执行一次 AI Review”。Review 可以产生零个
+或多个 HyWiki 页面；=🔒= 表示 Review 已完成，而不是表示一定创建了页面。
+</p>
+
+<p>
+概念晋升采用双层标准。必要条件是：能够用自己的语言解释，有可追溯的证据或推理，并且具有复用价值和清晰
+边界。成熟度还需满足以下之一：概念在至少两篇独立 Denote 中出现，或者在一篇 Denote 中经过深入调查并形
+成 <code>supported</code> 或 <code>stable</code> 结论。出现次数只是成熟度信号，不能替代理解质量。
+</p>
+</div>
+</div>
+<div id="outline-container-org5b75283" class="outline-2">
+<h2 id="org5b75283">Analysis</h2>
+<div class="outline-text-2" id="text-org5b75283">
+<p>
+概念优先方案把“遇到一个词”误当成“形成知识”，无法区分术语、临时事实和稳定心智模型。任务优先方案则把
+“值得知道”误当成“承诺行动”，会损害 GTD 的可信度。独立 Question Inbox 在问题量和跨文档追踪需求尚未被
+实际证明前，会增加不必要的系统复杂度。
+</p>
+
+<p>
+Review Gate 更符合批判性思维的时间顺序：Observation 引出 Question，Question 形成 Hypothesis，
+Investigation 产生 Evidence，Reasoning 支持 Conclusion，最后才可能抽象出 Concept。它也保留了人工判断
+空间：未解决且不可行动的问题继续留在 Denote；具有明确下一步且值得投入的问题只被建议进入 GTD，未经授
+权不自动创建；已经解决的问题只有在形成可复用理解后才成为 HyWiki 候选。
+</p>
+
+<p>
+反面证据是目前缺少长期运行数据，无法确认五次提交是否是最佳 Review 周期，也无法确认仅依靠各篇 Denote
+的 Question 和 Open Questions 是否足以追踪跨月问题。因此当前结论支持先使用最小三层结构，而不是断言永
+远不需要独立问题库。
+</p>
+</div>
+</div>
+<div id="outline-container-orgcc065fb" class="outline-2">
+<h2 id="orgcc065fb">Conclusion</h2>
+<div class="outline-text-2" id="text-orgcc065fb">
+<ul class="org-ul">
+<li>Status: supported</li>
+<li>Confidence: medium</li>
+<li>Answer: 使用问题驱动的三层工作流。Denote 保存问题和研究过程；周期性 AI Review 负责问题分类与知识晋
+升；GTD 只管理明确的行动承诺；HyWiki 只保存已经形成证据、推理、边界和个人理解的稳定概念。</li>
+<li>Decision or result: 每五次相关提交触发一次 AI Review，而不是强制生成 HyWiki 页面。Review 先处理问
+题，再应用概念晋升标准；一次没有合格概念的 Review 仍然有效。暂不建立独立 Question Inbox，也不自动
+创建 GTD 任务。</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org5b31285" class="outline-2">
+<h2 id="org5b31285">Reflection</h2>
+<div class="outline-text-2" id="text-org5b31285">
+<p>
+该设计的优势来自清晰的职责边界，而不是目录数量或自动化程度。真正困难的部分仍是语义判断：问题是否值得
+投入、结论是否已经解决问题、概念是否具有复用价值，这些不能仅靠出现频率机械决定。
+</p>
+
+<p>
+当前方案可能低估跨多篇 Denote 追踪同一问题的困难。应先积累实际 Review 记录，再判断是否需要稳定的
+Question ID、问题状态或独立问题池，避免根据想象提前增加结构。
+</p>
+</div>
+</div>
+<div id="outline-container-org9495b88" class="outline-2">
+<h2 id="org9495b88">Open Questions</h2>
+<div class="outline-text-2" id="text-org9495b88">
+</div>
+<div id="outline-container-orge6d989c" class="outline-3">
+<h3 id="orge6d989c">五次提交是否是合适的 Review 周期？</h3>
+<div class="outline-text-3" id="text-orge6d989c">
+<ul class="org-ul">
+<li>Why it matters: 周期过短会增加 Review 成本，过长可能延迟知识整理。</li>
+<li>Evidence needed: 连续数周记录每次 Review 的候选数量、有效晋升数量和耗时。</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org2fa92b2" class="outline-3">
+<h3 id="org2fa92b2">是否需要跨 Denote 的 Question Identity？</h3>
+<div class="outline-text-3" id="text-org2fa92b2">
+<ul class="org-ul">
+<li>Why it matters: 同一个问题可能以不同表述反复出现，单靠标题匹配可能无法追踪其演化。</li>
+<li>Evidence needed: 观察实际 Review 中重复问题的比例以及人工合并成本。</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-org2fa53d9" class="outline-3">
+<h3 id="org2fa53d9">什么情况下问题应该建议进入 GTD？</h3>
+<div class="outline-text-3" id="text-org2fa53d9">
+<ul class="org-ul">
+<li>Why it matters: 需要在研究兴趣和真实行动承诺之间保持边界。</li>
+<li>Evidence needed: 检查建议是否都能写出具体下一步、完成条件和投入理由。</li>
+</ul>
+</div>
+</div>
+</div>
+<div id="outline-container-org7cdf158" class="outline-2">
+<h2 id="org7cdf158">Extract Concepts</h2>
+<div class="outline-text-2" id="text-org7cdf158">
+</div>
+<div id="outline-container-org005a65c" class="outline-3">
+<h3 id="org005a65c">ProblemDrivenKnowledgeWorkflow</h3>
+<div class="outline-text-3" id="text-org005a65c">
+<ul class="org-ul">
+<li>Maturity: supported</li>
+<li>Definition: 以问题推动调查和知识形成，并通过 Review Gate 将研究历史、行动承诺与稳定知识分离的个人
+知识工作流。</li>
+<li>Evidence: 本文对概念优先、任务优先、独立问题池和 Review Gate 的职责边界与失败模式进行了比较。</li>
+<li>Boundary: 不等于为每个问题创建任务或页面；它要求问题先保留上下文，只有行动承诺进入 GTD，只有成熟理
+解进入 HyWiki。</li>
+<li>Reuse: 可用于组织工程调试、技术学习、研究讨论和长期个人知识管理。</li>
+<li>HyWiki candidate: yes</li>
+</ul>
+</div>
+</div>
+<div id="outline-container-orga5982a1" class="outline-3">
+<h3 id="orga5982a1">KnowledgePromotionGate</h3>
+<div class="outline-text-3" id="text-orga5982a1">
+<ul class="org-ul">
+<li>Maturity: provisional</li>
+<li>Definition: 在候选理解进入长期知识库之前，对个人理解、证据、边界、复用价值和成熟度进行审查的晋升门
+槛。</li>
+<li>Evidence: 直接从术语生成页面存在知识垃圾风险，而出现次数不能替代理解质量。</li>
+<li>Boundary: 它不是按词频自动打分，也不要求每次 Review 都生成页面。</li>
+<li>Reuse: 可用于控制 HyWiki 或其他长期知识库的内容质量。</li>
+<li>HyWiki candidate: no</li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+</body>
+</html>
