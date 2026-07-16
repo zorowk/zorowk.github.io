@@ -190,6 +190,12 @@ samp {
   border-radius: 3px;
 }
 
+.link-list a {
+  display: block;
+  width: fit-content;
+  margin: 0.25rem 0;
+}
+
 table {
   display: block;
   width: 100%;
